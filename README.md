@@ -41,10 +41,17 @@ cargo test --release --test perf -- --ignored --nocapture   # 2万件の処理�
 1. アプリを起動し、写真ファイルやフォルダをウィンドウにドロップします。
 2. テンプレートや衝突時の扱いを調整し、一覧で変更後の名前を確認します。必要に応じて除外や手動編集をします。
 3. 「N 件をリネーム」を押して実行します。
-4. 元に戻したいときは「履歴」から対象の実行を選び、「元に戻す」を押します。
+4. 元に戻したいときは「履歴」から対象の実行を選び、「元に戻す」を押します。不要になった履歴は個別削除・一括削除ができます。
+
+### ポータブルモードとデータの保存先
+- **通常（インストール時）**：履歴は OS 標準のアプリデータフォルダ内の `journals/` に JSONL 形式で保存されます（Windows の例：`%APPDATA%\com.renamepictures.timestamp\journals`）。
+- **ポータブルモード**：実行ファイルと同じフォルダ（macOS では `.app` バンドルと同じフォルダ）に空の `portable` ファイル（または `portable.txt`、あるいは `data/` フォルダ）を置いて起動すると、履歴と WebView データが同じ場所の `data/` 配下（`data/journals`・`data/webview`）にまとめて保存されます。
+  - `portable` ファイルを残しておけば、`data/` フォルダを削除しても次回以降もポータブルモードのまま利用できます。
+  - 不要になったらアプリフォルダごと（または `data/` フォルダを）削除することでシステム領域に履歴や WebView2 のデータを残さず片付けられます。
+- **環境変数での指定**：環境変数 `PHOTO_RENAMER_DATA_DIR` を指定すると、そのフォルダ配下（`journals/`・`webview/`）をデータ保存先として使用します。
+- 現在の動作モードと保存先パスは「履歴」画面で確認でき、そのままフォルダを開くこともできます。
 
 ### 補足
-- 履歴はアプリのデータフォルダの `journals/` に JSONL 形式で保存されます（Windows の例：`%APPDATA%\com.renamepictures.timestamp\journals`）。
 - ExifTool は同梱していません。ネイティブで読み取れなかったファイルがある場合のみ、`PATH` 上の `exiftool` を補助的に呼び出します。
 - CLI 版とは異なり、名前の途中にある `.` は消さずに残します（例：`a.b.jpg` の `{name}` は `a.b`）。
 
@@ -72,7 +79,8 @@ Example: 7M400001.ARW => IMG_20230223_125312_7M400001.ARW
 ## GUI app
 - Drag and drop files or folders into the window, preview the new names, then rename.
 - Naming is configured with a template such as `IMG_{date:YYYYMMDD_HHmmss}_{name}` (tokens: `{date:FORMAT}`, `{name}`, `{seq:N}`, `{camera}`; any other text is kept literally).
-- Conflicts are detected before renaming, existing files are never overwritten, every run is journaled and can be undone, and interrupted runs can be resumed.
+- Conflicts are detected before renaming, existing files are never overwritten, every run is journaled and can be undone or deleted, and interrupted runs can be resumed.
+- Portable mode: place an empty `portable` (or `portable.txt`) file or a `data/` directory next to the executable (or next to the `.app` bundle on macOS) to store journals and WebView data under `data/`. You can also override the data directory with `PHOTO_RENAMER_DATA_DIR`.
 - Build: `cd app && npm install && npm run tauri build` (requires Node.js, Rust and the Tauri prerequisites).
 ## CLI script
 This script renames all photo files in a directory that selected as argument.  

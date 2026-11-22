@@ -1,7 +1,17 @@
 import { create } from "zustand";
-import { cancelJob, executeRename, listJournals, resumeJob, undoJob } from "../api/commands";
+import {
+  cancelJob,
+  clearJournals as clearJournalsCommand,
+  deleteJournal as deleteJournalCommand,
+  executeRename,
+  getStorageInfo,
+  listJournals,
+  openStorageDir as openStorageDirCommand,
+  resumeJob,
+  undoJob,
+} from "../api/commands";
 import { onJobFinished, onJobProgress } from "../api/events";
-import type { JobKind, JobReport, JournalInfo, LogLine, Progress } from "../types";
+import type { JobKind, JobReport, JournalInfo, LogLine, Progress, StorageInfo } from "../types";
 import { errorMessage, useSessionStore } from "./sessionStore";
 
 const MAX_LOG_LINES = 5000;
@@ -21,7 +31,9 @@ interface JobStore {
   lastReport: JobReport | null;
   lastSkipped: number;
   journals: JournalInfo[];
+  storage: StorageInfo | null;
   historyOpen: boolean;
+  historyError: string | null;
   interrupted: JournalInfo | null;
   error: string | null;
   init: () => () => void;
@@ -30,6 +42,10 @@ interface JobStore {
   resume: (job: string) => Promise<void>;
   cancel: () => Promise<void>;
   loadJournals: () => Promise<JournalInfo[]>;
+  loadStorageInfo: () => Promise<void>;
+  deleteJournal: (job: string) => Promise<void>;
+  clearJournals: () => Promise<void>;
+  openStorageDir: () => Promise<void>;
   setHistoryOpen: (open: boolean) => void;
   dismissInterrupted: () => void;
   dismissReport: () => void;
@@ -56,7 +72,9 @@ export const useJobStore = create<JobStore>((set, get) => {
     lastReport: null,
     lastSkipped: 0,
     journals: [],
+    storage: null,
     historyOpen: false,
+    historyError: null,
     interrupted: null,
     error: null,
 
@@ -97,6 +115,7 @@ export const useJobStore = create<JobStore>((set, get) => {
         }),
       );
 
+      void get().loadStorageInfo();
       void get()
         .loadJournals()
         .then((journals) => {
@@ -145,9 +164,53 @@ export const useJobStore = create<JobStore>((set, get) => {
       }
     },
 
+    loadStorageInfo: async () => {
+      try {
+        const storage = await getStorageInfo();
+        set({ storage });
+      } catch {
+        // Storage info is unavailable outside of Tauri.
+      }
+    },
+
+    deleteJournal: async (job) => {
+      set({ historyError: null });
+      try {
+        await deleteJournalCommand(job);
+        const interrupted = get().interrupted;
+        if (interrupted?.job === job) set({ interrupted: null });
+        await get().loadJournals();
+      } catch (reason) {
+        set({ historyError: errorMessage(reason) });
+      }
+    },
+
+    clearJournals: async () => {
+      set({ historyError: null });
+      try {
+        await clearJournalsCommand();
+        set({ interrupted: null });
+        await get().loadJournals();
+      } catch (reason) {
+        set({ historyError: errorMessage(reason) });
+      }
+    },
+
+    openStorageDir: async () => {
+      set({ historyError: null });
+      try {
+        await openStorageDirCommand();
+      } catch (reason) {
+        set({ historyError: errorMessage(reason) });
+      }
+    },
+
     setHistoryOpen: (historyOpen) => {
-      set({ historyOpen });
-      if (historyOpen) void get().loadJournals();
+      set({ historyOpen, historyError: null });
+      if (historyOpen) {
+        void get().loadJournals();
+        void get().loadStorageInfo();
+      }
     },
 
     dismissInterrupted: () => set({ interrupted: null }),

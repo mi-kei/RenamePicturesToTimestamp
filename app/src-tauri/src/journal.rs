@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File, OpenOptions},
     io::{self, BufRead, BufReader, BufWriter, Write},
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
 };
 
 use serde::{Deserialize, Serialize};
@@ -325,13 +325,82 @@ pub fn list(directory: &Path) -> Vec<JournalInfo> {
     infos
 }
 
+fn validate_job_id(job: &str) -> Result<(), String> {
+    if job.is_empty() || job.contains('/') || job.contains('\\') {
+        return Err("履歴 ID が正しくありません".to_owned());
+    }
+    let mut components = Path::new(job).components();
+    match (components.next(), components.next()) {
+        (Some(Component::Normal(_)), None) => Ok(()),
+        _ => Err("履歴 ID が正しくありません".to_owned()),
+    }
+}
+
+fn remove_dir_if_empty(directory: &Path) {
+    let Ok(mut entries) = fs::read_dir(directory) else {
+        return;
+    };
+    if entries.next().is_none() {
+        let _ = fs::remove_dir(directory);
+    }
+}
+
+pub fn delete(directory: &Path, job: &str) -> Result<bool, String> {
+    validate_job_id(job)?;
+    let path = journal_path(directory, job);
+    match fs::remove_file(&path) {
+        Ok(()) => {
+            remove_dir_if_empty(directory);
+            Ok(true)
+        }
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("履歴を削除できません ({}): {error}", path.display())),
+    }
+}
+
+pub fn clear(directory: &Path) -> Result<u32, String> {
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => {
+            return Err(format!(
+                "履歴フォルダを読み取れません ({}): {error}",
+                directory.display()
+            ))
+        }
+    };
+
+    let mut removed = 0u32;
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("履歴の走査に失敗しました: {error}"))?;
+        let path = entry.path();
+        if !path
+            .extension()
+            .is_some_and(|extension| extension == "jsonl")
+        {
+            continue;
+        }
+        match fs::remove_file(&path) {
+            Ok(()) => removed += 1,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!("履歴を削除できません ({}): {error}", path.display()))
+            }
+        }
+    }
+    remove_dir_if_empty(directory);
+    Ok(removed)
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
 
     use tempfile::tempdir;
 
-    use super::{journal_path, list, read, JobKind, JournalWriter, Record, SeqState};
+    use super::{
+        clear, delete, journal_path, list, read, JobKind, JournalWriter, Record, SeqState,
+    };
 
     fn header() -> Record {
         Record::Header {
@@ -400,5 +469,50 @@ mod tests {
         assert_eq!(infos.len(), 1);
         assert!(infos[0].incomplete);
         assert_eq!(infos[0].done, 1);
+    }
+
+    #[test]
+    fn deletes_single_journal_and_cleans_up_empty_directory() {
+        let root = tempdir().unwrap();
+        let journals = root.path().join("journals");
+        let path = journal_path(&journals, "job-1");
+        let mut journal = JournalWriter::create(&path, &[header(), planned(1)]).unwrap();
+        journal.finish("completed").unwrap();
+        drop(journal);
+
+        assert!(delete(&journals, "job-1").unwrap());
+        assert!(!path.exists());
+        assert!(!journals.exists());
+        assert!(!delete(&journals, "job-1").unwrap());
+    }
+
+    #[test]
+    fn rejects_invalid_job_ids_when_deleting() {
+        let root = tempdir().unwrap();
+        let journals = root.path().join("journals");
+        for bad in ["", ".", "..", "../escape", "sub/job", "sub\\job"] {
+            assert!(delete(&journals, bad).is_err(), "expected error for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn clears_all_journals_and_keeps_unrelated_files() {
+        let root = tempdir().unwrap();
+        let journals = root.path().join("journals");
+        for id in ["job-1", "job-2"] {
+            let path = journal_path(&journals, id);
+            let mut journal = JournalWriter::create(&path, &[header()]).unwrap();
+            journal.finish("completed").unwrap();
+        }
+        let note = journals.join("keep.txt");
+        fs::write(&note, b"keep").unwrap();
+
+        assert_eq!(clear(&journals).unwrap(), 2);
+        assert!(list(&journals).is_empty());
+        assert!(note.exists());
+
+        fs::remove_file(&note).unwrap();
+        assert_eq!(clear(&journals).unwrap(), 0);
+        assert!(!journals.exists());
     }
 }

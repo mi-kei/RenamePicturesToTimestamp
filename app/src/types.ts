@@ -44,6 +44,15 @@ export interface JournalInfo {
   undoneBy: string | null;
 }
 
+export type StorageMode = "portable" | "system" | "custom";
+
+export interface StorageInfo {
+  mode: StorageMode;
+  dataDir: string;
+  journalsDir: string;
+  webviewDir: string | null;
+}
+
 export interface ScannedFile {
   id: number;
   path: string;

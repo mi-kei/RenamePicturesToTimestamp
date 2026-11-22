@@ -714,6 +714,89 @@ fieldset.plain {
   gap: 8px;
 }
 
+.modal-actions-split {
+  justify-content: space-between;
+}
+
+button.ghost.ghost-danger {
+  border-color: #ebc8c8;
+  color: #a33333;
+}
+
+button.ghost.ghost-danger:hover:not(:disabled) {
+  background: #fdf3f3;
+}
+
+.history-storage {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #f8faf7;
+}
+
+.history-storage-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-storage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.history-storage-label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.storage-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.storage-badge.mode-portable {
+  color: #1f6a45;
+  background: #dff1e5;
+}
+
+.storage-badge.mode-system {
+  color: #5e6c63;
+  background: #e9eee8;
+}
+
+.storage-badge.mode-custom {
+  color: #275f8a;
+  background: #e1eef8;
+}
+
+.history-storage-path {
+  display: block;
+  overflow: hidden;
+  color: #2b4436;
+  font-family: "Cascadia Mono", Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.history-storage button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
 .history-list {
   display: flex;
   flex-direction: column;

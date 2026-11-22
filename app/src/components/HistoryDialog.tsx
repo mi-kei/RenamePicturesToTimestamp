@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useJobStore } from "../store/jobStore";
-import type { JournalInfo } from "../types";
+import type { JournalInfo, StorageMode } from "../types";
 
 const STATE_LABELS: Record<string, string> = {
   completed: "完了",
@@ -9,6 +9,17 @@ const STATE_LABELS: Record<string, string> = {
   failed: "失敗",
   running: "実行中",
 };
+
+const STORAGE_MODE_LABELS: Record<StorageMode, string> = {
+  portable: "ポータブル",
+  system: "標準",
+  custom: "環境変数指定",
+};
+
+type PendingAction =
+  | { kind: "undo"; journal: JournalInfo }
+  | { kind: "delete"; journal: JournalInfo }
+  | { kind: "clear" };
 
 function formatCreated(created: string): string {
   return created.replace("T", " ");
@@ -66,30 +77,85 @@ export function ConfirmDialog({
 export function HistoryDialog() {
   const open = useJobStore((state) => state.historyOpen);
   const journals = useJobStore((state) => state.journals);
+  const storage = useJobStore((state) => state.storage);
+  const historyError = useJobStore((state) => state.historyError);
   const running = useJobStore((state) => state.running);
   const setOpen = useJobStore((state) => state.setHistoryOpen);
   const undo = useJobStore((state) => state.undo);
   const resume = useJobStore((state) => state.resume);
-  const [confirmUndo, setConfirmUndo] = useState<JournalInfo | null>(null);
+  const deleteJournal = useJobStore((state) => state.deleteJournal);
+  const clearJournals = useJobStore((state) => state.clearJournals);
+  const openStorageDir = useJobStore((state) => state.openStorageDir);
+  const [pending, setPending] = useState<PendingAction | null>(null);
 
   if (!open) return null;
 
-  if (confirmUndo) {
+  if (pending?.kind === "undo") {
+    const target = pending.journal;
     return (
       <ConfirmDialog
         title="元に戻す"
         message={
           <p>
-            {formatCreated(confirmUndo.created)} の実行で変更した {confirmUndo.done.toLocaleString()} 件を元の名前に戻します。
+            {formatCreated(target.created)} の実行で変更した {target.done.toLocaleString()} 件を元の名前に戻します。
             元の名前に別のファイルがある場合は、上書きせずにエラーとして記録します。
           </p>
         }
         confirmLabel="元に戻す"
         danger
-        onCancel={() => setConfirmUndo(null)}
+        onCancel={() => setPending(null)}
         onConfirm={() => {
-          setConfirmUndo(null);
-          void undo(confirmUndo.job);
+          setPending(null);
+          void undo(target.job);
+        }}
+      />
+    );
+  }
+
+  if (pending?.kind === "delete") {
+    const target = pending.journal;
+    return (
+      <ConfirmDialog
+        title="履歴を削除"
+        message={
+          <>
+            <p>{formatCreated(target.created)} の履歴を削除します。</p>
+            <p>
+              削除すると、この実行の「元に戻す」や「続きから再開」はできなくなります。
+              写真ファイル自体は削除されません。
+            </p>
+          </>
+        }
+        confirmLabel="削除する"
+        danger
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          setPending(null);
+          void deleteJournal(target.job);
+        }}
+      />
+    );
+  }
+
+  if (pending?.kind === "clear") {
+    return (
+      <ConfirmDialog
+        title="すべての履歴を削除"
+        message={
+          <>
+            <p>保存されている {journals.length.toLocaleString()} 件の履歴をすべて削除します。</p>
+            <p>
+              削除すると、過去の実行を元に戻したり再開したりできなくなります。
+              写真ファイル自体は削除されません。
+            </p>
+          </>
+        }
+        confirmLabel="すべて削除する"
+        danger
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          setPending(null);
+          void clearJournals();
         }}
       />
     );
@@ -97,6 +163,25 @@ export function HistoryDialog() {
 
   return (
     <Modal title="実行の履歴" onClose={() => setOpen(false)}>
+      {storage && (
+        <div className="history-storage">
+          <div className="history-storage-info">
+            <div className="history-storage-head">
+              <span className={`storage-badge mode-${storage.mode}`}>{STORAGE_MODE_LABELS[storage.mode]}</span>
+              <span className="history-storage-label">履歴の保存先</span>
+            </div>
+            <code className="history-storage-path" title={storage.journalsDir}>
+              {storage.journalsDir}
+            </code>
+          </div>
+          <button type="button" className="ghost" onClick={() => void openStorageDir()}>
+            フォルダを開く
+          </button>
+        </div>
+      )}
+
+      {historyError && <p className="field-error">{historyError}</p>}
+
       {journals.length === 0 ? (
         <p className="modal-message">まだ履歴はありません。</p>
       ) : (
@@ -123,16 +208,37 @@ export function HistoryDialog() {
                   </button>
                 )}
                 {canUndo(journal) && (
-                  <button type="button" className="ghost" disabled={!!running} onClick={() => setConfirmUndo(journal)}>
+                  <button
+                    type="button"
+                    className="ghost"
+                    disabled={!!running}
+                    onClick={() => setPending({ kind: "undo", journal })}
+                  >
                     元に戻す
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="ghost ghost-danger"
+                  disabled={journal.state === "running"}
+                  onClick={() => setPending({ kind: "delete", journal })}
+                >
+                  削除
+                </button>
               </div>
             </div>
           ))}
         </div>
       )}
-      <div className="modal-actions">
+      <div className="modal-actions modal-actions-split">
+        <button
+          type="button"
+          className="ghost ghost-danger"
+          disabled={journals.length === 0 || !!running}
+          onClick={() => setPending({ kind: "clear" })}
+        >
+          すべての履歴を削除
+        </button>
         <button type="button" className="ghost" onClick={() => setOpen(false)}>
           閉じる
         </button>

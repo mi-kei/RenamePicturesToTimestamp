@@ -1,5 +1,6 @@
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
+    process::Command,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -18,6 +19,7 @@ use crate::{
     renamer::{self, Job, RenameRequest},
     scan::{self, ScanSummary, ScannedFile, DEFAULT_EXTENSIONS},
     session::{ItemStatus, RowPage, Session},
+    storage::{StorageInfo, StoragePaths},
 };
 
 #[tauri::command(async)]
@@ -190,16 +192,10 @@ struct RunningJob {
     cancel: Arc<AtomicBool>,
 }
 
-fn journal_directory(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path()
-        .app_data_dir()
-        .map(|directory| directory.join("journals"))
-        .map_err(|error| format!("履歴の保存先を取得できません: {error}"))
-}
-
 fn start_job(
     app: AppHandle,
     jobs: &JobState,
+    storage: &StoragePaths,
     prepare: impl FnOnce(&Path) -> Result<Job, String>,
 ) -> Result<String, String> {
     let mut running = jobs
@@ -210,7 +206,7 @@ fn start_job(
         return Err("別の処理を実行中です".to_owned());
     }
 
-    let job = prepare(&journal_directory(&app)?)?;
+    let job = prepare(&storage.journals_dir)?;
     let id = job.id().to_owned();
     let cancel = Arc::new(AtomicBool::new(false));
     *running = Some(RunningJob {
@@ -283,6 +279,7 @@ pub fn execute_rename(
     app: AppHandle,
     session: State<'_, Session>,
     jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
 ) -> Result<String, String> {
     let template = session.template_source()?;
     let requests = session
@@ -294,7 +291,7 @@ pub fn execute_rename(
             to: rename.to,
         })
         .collect::<Vec<_>>();
-    start_job(app, &jobs, |directory| {
+    start_job(app, &jobs, &storage, |directory| {
         renamer::new_job(directory, JobKind::Rename, &template, None, requests)
     })
 }
@@ -316,8 +313,8 @@ pub fn cancel_job(jobs: State<'_, JobState>) -> Result<bool, String> {
 
 #[tauri::command(async)]
 pub fn list_journals(
-    app: AppHandle,
     jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
 ) -> Result<Vec<JournalInfo>, String> {
     let running = jobs
         .running
@@ -325,7 +322,7 @@ pub fn list_journals(
         .map_err(|_| "処理の状態を利用できません".to_owned())?
         .as_ref()
         .map(|job| job.id.clone());
-    let mut journals = journal::list(&journal_directory(&app)?);
+    let mut journals = journal::list(&storage.journals_dir);
     for info in &mut journals {
         if running.as_deref() == Some(info.job.as_str()) {
             info.state = "running".to_owned();
@@ -335,9 +332,89 @@ pub fn list_journals(
     Ok(journals)
 }
 
+#[tauri::command]
+pub fn get_storage_info(storage: State<'_, StoragePaths>) -> StorageInfo {
+    storage.info()
+}
+
 #[tauri::command(async)]
-pub fn undo_job(job: String, app: AppHandle, jobs: State<'_, JobState>) -> Result<String, String> {
-    start_job(app, &jobs, |directory| renamer::undo(directory, &job))
+pub fn delete_journal(
+    job: String,
+    jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
+) -> Result<(), String> {
+    let running = jobs
+        .running
+        .lock()
+        .map_err(|_| "処理の状態を利用できません".to_owned())?;
+    if running.as_ref().is_some_and(|current| current.id == job) {
+        return Err("実行中の履歴は削除できません".to_owned());
+    }
+    journal::delete(&storage.journals_dir, &job)?;
+    Ok(())
+}
+
+#[tauri::command(async)]
+pub fn clear_journals(
+    jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
+) -> Result<u32, String> {
+    let running = jobs
+        .running
+        .lock()
+        .map_err(|_| "処理の状態を利用できません".to_owned())?;
+    if running.is_some() {
+        return Err("処理の実行中は履歴を削除できません".to_owned());
+    }
+    journal::clear(&storage.journals_dir)
+}
+
+#[tauri::command(async)]
+pub fn open_storage_dir(storage: State<'_, StoragePaths>) -> Result<(), String> {
+    let target = storage
+        .open_directory_target()
+        .ok_or_else(|| "保存先フォルダが見つかりません".to_owned())?;
+    open_directory(&target)
+}
+
+fn open_directory(path: &Path) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        let mut cmd = Command::new("explorer");
+        cmd.arg(path);
+        cmd
+    };
+
+    #[cfg(target_os = "macos")]
+    let mut command = {
+        let mut cmd = Command::new("open");
+        cmd.arg(path);
+        cmd
+    };
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    let mut command = {
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(path);
+        cmd
+    };
+
+    command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("フォルダを開けません ({}): {error}", path.display()))
+}
+
+#[tauri::command(async)]
+pub fn undo_job(
+    job: String,
+    app: AppHandle,
+    jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
+) -> Result<String, String> {
+    start_job(app, &jobs, &storage, |directory| {
+        renamer::undo(directory, &job)
+    })
 }
 
 #[tauri::command(async)]
@@ -345,8 +422,11 @@ pub fn resume_job(
     job: String,
     app: AppHandle,
     jobs: State<'_, JobState>,
+    storage: State<'_, StoragePaths>,
 ) -> Result<String, String> {
-    start_job(app, &jobs, |directory| renamer::resume(directory, &job))
+    start_job(app, &jobs, &storage, |directory| {
+        renamer::resume(directory, &job)
+    })
 }
 
 #[tauri::command(async)]

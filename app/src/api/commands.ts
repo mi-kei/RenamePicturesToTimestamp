@@ -7,6 +7,7 @@ import type {
   RowPage,
   ScanSummary,
   StatusKind,
+  StorageInfo,
 } from "../types";
 
 export function scanPaths(paths: string[], recursive: boolean, extensions: string[] = []): Promise<ScanSummary> {
@@ -54,6 +55,22 @@ export function cancelJob(): Promise<boolean> {
 
 export function listJournals(): Promise<JournalInfo[]> {
   return invoke<JournalInfo[]>("list_journals");
+}
+
+export function getStorageInfo(): Promise<StorageInfo> {
+  return invoke<StorageInfo>("get_storage_info");
+}
+
+export function deleteJournal(job: string): Promise<void> {
+  return invoke<void>("delete_journal", { job });
+}
+
+export function clearJournals(): Promise<number> {
+  return invoke<number>("clear_journals");
+}
+
+export function openStorageDir(): Promise<void> {
+  return invoke<void>("open_storage_dir");
 }
 
 export function undoJob(job: string): Promise<string> {
