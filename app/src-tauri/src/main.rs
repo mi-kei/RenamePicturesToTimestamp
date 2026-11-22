@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    photo_renamer_lib::run();
+    rename_photos_to_timestamp_gui_lib::run();
 }

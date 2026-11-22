@@ -1,4 +1,4 @@
-# RenamePicturesToTimestamp
+# RenamePhotosToTimestamp
 ## 概要
 写真ファイルのファイル名を撮影日時にリネームします。  
 GUI 版（`app/`、Windows・macOS・Linux 対応）と、従来の CLI 版（`rename_picture_files_to_timestamp.py`）があります。  
@@ -48,7 +48,7 @@ cargo test --release --test perf -- --ignored --nocapture   # 2万件の処理�
 - **ポータブルモード**：実行ファイルと同じフォルダ（macOS では `.app` バンドルと同じフォルダ）に空の `portable` ファイル（または `portable.txt`、あるいは `data/` フォルダ）を置いて起動すると、履歴と WebView データが同じ場所の `data/` 配下（`data/journals`・`data/webview`）にまとめて保存されます。
   - `portable` ファイルを残しておけば、`data/` フォルダを削除しても次回以降もポータブルモードのまま利用できます。
   - 不要になったらアプリフォルダごと（または `data/` フォルダを）削除することでシステム領域に履歴や WebView2 のデータを残さず片付けられます。
-- **環境変数での指定**：環境変数 `PHOTO_RENAMER_DATA_DIR` を指定すると、そのフォルダ配下（`journals/`・`webview/`）をデータ保存先として使用します。
+- **環境変数での指定**：環境変数 `RENAME_PHOTOS_TO_TIMESTAMP_GUI_DATA_DIR` を指定すると、そのフォルダ配下（`journals/`・`webview/`）をデータ保存先として使用します。
 - 現在の動作モードと保存先パスは「履歴」画面で確認でき、そのままフォルダを開くこともできます。
 
 ### 補足
@@ -80,7 +80,7 @@ Example: 7M400001.ARW => IMG_20230223_125312_7M400001.ARW
 - Drag and drop files or folders into the window, preview the new names, then rename.
 - Naming is configured with a template such as `IMG_{date:YYYYMMDD_HHmmss}_{name}` (tokens: `{date:FORMAT}`, `{name}`, `{seq:N}`, `{camera}`; any other text is kept literally).
 - Conflicts are detected before renaming, existing files are never overwritten, every run is journaled and can be undone or deleted, and interrupted runs can be resumed.
-- Portable mode: place an empty `portable` (or `portable.txt`) file or a `data/` directory next to the executable (or next to the `.app` bundle on macOS) to store journals and WebView data under `data/`. You can also override the data directory with `PHOTO_RENAMER_DATA_DIR`.
+- Portable mode: place an empty `portable` (or `portable.txt`) file or a `data/` directory next to the executable (or next to the `.app` bundle on macOS) to store journals and WebView data under `data/`. You can also override the data directory with `RENAME_PHOTOS_TO_TIMESTAMP_GUI_DATA_DIR`.
 - Build: `cd app && npm install && npm run tauri build` (requires Node.js, Rust and the Tauri prerequisites).
 ## CLI script
 This script renames all photo files in a directory that selected as argument.  

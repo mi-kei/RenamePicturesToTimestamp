@@ -1,12 +1,12 @@
 [package]
-name = "photo-renamer"
+name = "RenamePhotosToTimeStampGUI"
 version = "0.1.0"
 description = "A safe cross-platform photo timestamp renamer"
-authors = ["you"]
+authors = ["mi-kei"]
 edition = "2021"
 
 [lib]
-name = "photo_renamer_lib"
+name = "rename_photos_to_timestamp_gui_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

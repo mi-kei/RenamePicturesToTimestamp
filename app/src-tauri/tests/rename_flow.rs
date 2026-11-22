@@ -4,7 +4,7 @@ use std::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use photo_renamer_lib::{
+use rename_photos_to_timestamp_gui_lib::{
     journal::{self, JobKind},
     renamer::{self, RenameRequest},
 };

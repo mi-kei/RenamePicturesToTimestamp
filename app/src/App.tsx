@@ -57,10 +57,10 @@ export default function App() {
       <DropZone />
       <header className="topbar">
         <div className="brand-mark" aria-hidden="true">
-          PR
+          RP
         </div>
         <div>
-          <p className="eyebrow">PHOTO RENAMER</p>
+          <p className="eyebrow">RenamePhotosToTimeStampGUI</p>
           <h1>撮影日時でファイル名を整理</h1>
         </div>
         <div className="topbar-actions">

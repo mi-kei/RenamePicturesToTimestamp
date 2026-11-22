@@ -48,5 +48,5 @@ pub fn run() {
             commands::resume_job
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Photo Renamer");
+        .expect("error while running RenamePhotosToTimeStampGUI");
 }

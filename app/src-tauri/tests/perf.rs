@@ -1,6 +1,6 @@
 use std::{fs, sync::atomic::AtomicBool, time::Instant};
 
-use photo_renamer_lib::{
+use rename_photos_to_timestamp_gui_lib::{
     journal::JobKind,
     renamer::{self, RenameRequest},
 };
